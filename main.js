@@ -19,10 +19,11 @@ import {
     doc, 
     deleteDoc, 
     updateDoc, 
-    serverTimestamp 
+    serverTimestamp,
+    getDoc // Belgeyi tek seferlik almak için eklendi
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Firebase yapılandırmanızı tanımlayın (Sizin sağladığınız bilgilerle güncellendi)
+// Firebase yapılandırmanızı tanımlayın
 const firebaseConfig = {
     apiKey: "AIzaSyCs_fi2E-KkfXaB8wUXeeTI2AbOPzfv770",
     authDomain: "whereismymeet.firebaseapp.com",
@@ -63,7 +64,6 @@ const activityList = document.getElementById('activity-list');
 
 // Yeni eklenen modal elementleri
 const confirmationModal = document.getElementById('confirmation-modal');
-const modalTitle = document.getElementById('modal-title');
 const modalMessage = document.getElementById('modal-message');
 const modalCancelButton = document.getElementById('modal-cancel-button');
 const modalConfirmButton = document.getElementById('modal-confirm-button');
@@ -132,7 +132,7 @@ toggleAuthButton.addEventListener('click', (e) => {
 // Kimlik doğrulama formunu gönderme işleyicisi
 authForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    console.log("Auth form submitted."); // Debug log
+    console.log("Auth form submitted. isRegistering:", isRegistering); // Debug log
     const email = emailInput.value;
     const password = passwordInput.value;
 
@@ -143,21 +143,14 @@ authForm.addEventListener('submit', async (e) => {
     }
 
     if (isRegistering) {
-        console.log("Attempting to register new user..."); // Debug log
-        console.log(`Email: ${email}, Password length: ${password.length}`); // Debug log (don't log actual password)
-        // Kayıt ol
+        console.log("Attempting to register new user with email:", email); // Debug log
         try {
             await createUserWithEmailAndPassword(auth, email, password);
-            console.log("User successfully registered."); // Debug log
-            showMessage('Başarıyla kaydoldunuz! Şimdi giriş yapabilirsiniz.', false);
-            // Kaydolduktan sonra otomatik olarak giriş yapma ekranına dön
-            isRegistering = false;
-            authTitle.textContent = 'Giriş Yap';
-            authButton.textContent = 'Giriş Yap';
-            toggleAuthButton.textContent = 'Kaydolun';
+            console.log("User successfully registered and logged in."); // Debug log
+            showMessage('Başarıyla kaydoldunuz! Giriş yaptınız.', false);
+            // Başarılı kaydolma ve otomatik girişten sonra UI'ı güncellemek onAuthStateChanged'a bırakılır.
         } catch (error) {
             console.error("Registration error:", error); // Debug log
-            // Firebase hata kodlarını daha anlaşılır mesajlara çevirebiliriz
             let errorMessage = error.message;
             if (error.code === 'auth/email-already-in-use') {
                 errorMessage = 'Bu e-posta adresi zaten kullanılıyor.';
@@ -169,13 +162,12 @@ authForm.addEventListener('submit', async (e) => {
             showMessage(`Kaydolma hatası: ${errorMessage}`);
         }
     } else {
-        console.log("Attempting to sign in user..."); // Debug log
-        console.log(`Email: ${email}, Password length: ${password.length}`); // Debug log
-        // Giriş yap
+        console.log("Attempting to sign in user with email:", email); // Debug log
         try {
             await signInWithEmailAndPassword(auth, email, password);
             console.log("User successfully signed in."); // Debug log
             showMessage('Başarıyla giriş yaptınız!', false);
+            // Başarılı girişten sonra UI'ı güncellemek onAuthStateChanged'a bırakılır.
         } catch (error) {
             console.error("Sign-in error:", error); // Debug log
             let errorMessage = error.message;
@@ -183,6 +175,8 @@ authForm.addEventListener('submit', async (e) => {
                 errorMessage = 'Geçersiz e-posta veya şifre.';
             } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
                 errorMessage = 'Geçersiz e-posta veya şifre.';
+            } else if (error.code === 'auth/user-disabled') {
+                errorMessage = 'Kullanıcı hesabı devre dışı bırakılmış.';
             }
             showMessage(`Giriş hatası: ${errorMessage}`);
         }
@@ -193,48 +187,54 @@ authForm.addEventListener('submit', async (e) => {
 logoutButton.addEventListener('click', async () => {
     try {
         await signOut(auth);
+        console.log("User signed out."); // Debug log
         showMessage('Başarıyla çıkış yaptınız!', false);
     } catch (error) {
+        console.error("Sign-out error:", error); // Debug log
         showMessage(`Çıkış hatası: ${error.message}`);
     }
 });
 
-// Kimlik doğrulama durumu değiştiğinde çalışır
+// Kimlik doğrulama durumu değiştiğinde çalışır - Bu, Firebase Auth'un ana dinleyicisidir
 onAuthStateChanged(auth, async (user) => {
+    console.log("onAuthStateChanged triggered. User:", user ? user.uid : "null"); // Debug log
     if (user) {
-        // Kullanıcı giriş yapmış
+        // Kullanıcı giriş yapmış (e-posta/şifre veya anonim)
         currentUserId = user.uid;
+        console.log("Current user ID:", currentUserId); // Debug log
+
+        // Eğer Canvas ortamındaysak ve kullanıcı anonimse, custom token ile giriş yapmayı deneriz.
+        // Bu, Canvas'ın varsayılan otomatik girişini yönetir ve mevcut e-posta/şifre oturumunu bozmaz.
+        if (typeof __initial_auth_token !== 'undefined' && user.isAnonymous) {
+            try {
+                // Sadece kullanıcı gerçekten anonim ise özel token ile giriş yapmayı deneyin
+                await signInWithCustomToken(auth, __initial_auth_token);
+                console.log("Canvas tarafından sağlanan özel token ile giriş yapıldı.");
+                // Token ile başarılı girişten sonra onAuthStateChanged tekrar tetiklenebilir
+            } catch (error) {
+                console.error("Özel token ile giriş hatası:", error);
+                // Hata durumunda kullanıcıyı anonim bırak, yine de verileri kaydedebilir (geçici)
+            }
+        }
+        
+        // Uygulama arayüzünü göster
         authContainer.classList.add('hidden');
         appContainer.classList.remove('hidden');
         loadActivities(currentUserId); // Kullanıcının aktivitelerini yükle
-
-        // __initial_auth_token değişkeni Canvas ortamında otomatik olarak sağlanır.
-        // Eğer bu değişken tanımlıysa ve kullanıcı anonimse (test amaçlı) custom token ile giriş yapmayı deneriz.
-        if (typeof __initial_auth_token !== 'undefined' && user.isAnonymous) {
-            try {
-                await signInWithCustomToken(auth, __initial_auth_token);
-                console.log("Custom token ile giriş yapıldı.");
-            } catch (error) {
-                console.error("Custom token ile giriş hatası:", error);
-            }
-        }
     } else {
-        // Kullanıcı çıkış yapmış veya giriş yapmamış
+        // Kullanıcı çıkış yapmış veya henüz giriş yapmamış
         currentUserId = null;
-        authContainer.classList.remove('hidden');
+        console.log("User is logged out. Showing auth container."); // Debug log
+        
+        // Kimlik doğrulama arayüzünü göster
         appContainer.classList.add('hidden');
+        authContainer.classList.remove('hidden');
         activityList.innerHTML = ''; // Aktiviteleri temizle
 
-        // __initial_auth_token tanımlı değilse anonim olarak giriş yap.
-        // Bu, uygulamanın Canvas dışındaki ortamlarda da çalışmasını sağlar.
-        if (typeof __initial_auth_token === 'undefined') {
-             try {
-                await signInAnonymously(auth);
-                console.log("Anonim olarak giriş yapıldı.");
-            } catch (error) {
-                console.error("Anonim giriş hatası:", error);
-            }
-        }
+        // NOT: Kalıcı veri tutma istendiği için burada otomatik anonim giriş yapmıyoruz.
+        // Kullanıcı, e-posta/şifre formu üzerinden açıkça giriş yapmalı veya kaydolmalıdır.
+        // Eğer Canvas'ın kendi otomatik token'ı yoksa ve kullanıcı giriş yapmamışsa,
+        // kullanıcıdan giriş yapması beklenecektir.
     }
 });
 
@@ -262,6 +262,7 @@ addActivityButton.addEventListener('click', async () => {
             reminderTimeSelect.value = '';
             showMessage('Aktivite başarıyla eklendi!', false);
         } catch (error) {
+            console.error("Activity add error:", error); // Debug log
             showMessage(`Aktivite ekleme hatası: ${error.message}`);
         }
     } else {
@@ -271,10 +272,19 @@ addActivityButton.addEventListener('click', async () => {
 
 // Aktiviteleri Firestore'dan yükleyen ve dinleyen fonksiyon
 function loadActivities(userId) {
+    if (!userId) {
+        console.log("No user ID available to load activities.");
+        activityList.innerHTML = ''; // Kullanıcı yoksa listeyi temizle
+        return;
+    }
+    console.log("Loading activities for user ID:", userId); // Debug log
     // Kullanıcının koleksiyonuna sorgu oluştur
     const q = query(collection(db, `artifacts/${appId}/users/${userId}/activities`));
 
     // Anlık güncellemeleri dinle
+    // onSnapshot, dinlemeyi başlatan bir Unsubscribe fonksiyonu döndürür.
+    // Uygulamadan çıkarken veya kullanıcı değiştiğinde eski dinleyicileri temizlemek iyi bir pratiktir.
+    // Şimdilik basit tutuyoruz, ancak karmaşık uygulamalarda bu önemli olabilir.
     onSnapshot(q, (snapshot) => {
         activityList.innerHTML = ''; // Listeyi temizle
         const activities = [];
@@ -289,29 +299,33 @@ function loadActivities(userId) {
             return dateA - dateB;
         });
 
-        activities.forEach(activity => {
-            const listItem = document.createElement('li');
-            listItem.className = 'bg-gray-50 p-4 rounded-lg shadow-sm flex items-center justify-between transition duration-200 hover:bg-gray-100';
-            
-            const activityDateTime = activity.time ? `${activity.date} ${activity.time}` : activity.date;
-            const reminderText = activity.reminder ? `(Hatırlatıcı: ${activity.reminder})` : '';
+        if (activities.length === 0) {
+            activityList.innerHTML = '<li class="text-center text-gray-500 py-4">Henüz hiç aktivite yok. Yeni bir tane ekleyin!</li>';
+        } else {
+            activities.forEach(activity => {
+                const listItem = document.createElement('li');
+                listItem.className = 'bg-gray-50 p-4 rounded-lg shadow-sm flex items-center justify-between transition duration-200 hover:bg-gray-100';
+                
+                const activityDateTime = activity.time ? `${activity.date} ${activity.time}` : activity.date;
+                const reminderText = activity.reminder ? `(Hatırlatıcı: ${activity.reminder})` : '';
 
-            listItem.innerHTML = `
-                <div>
-                    <h4 class="text-lg font-medium text-gray-800">${activity.title}</h4>
-                    <p class="text-sm text-gray-600">${activityDateTime} ${reminderText}</p>
-                </div>
-                <div>
-                    <button data-id="${activity.id}" class="edit-button bg-blue-500 text-white px-3 py-1 rounded-md text-sm mr-2 hover:bg-blue-600 transition duration-200">Düzenle</button>
-                    <button data-id="${activity.id}" class="delete-button bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600 transition duration-200">Sil</button>
-                </div>
-            `;
-            activityList.appendChild(listItem);
-        });
+                listItem.innerHTML = `
+                    <div>
+                        <h4 class="text-lg font-medium text-gray-800">${activity.title}</h4>
+                        <p class="text-sm text-gray-600">${activityDateTime} ${reminderText}</p>
+                    </div>
+                    <div>
+                        <button data-id="${activity.id}" class="edit-button bg-blue-500 text-white px-3 py-1 rounded-md text-sm mr-2 hover:bg-blue-600 transition duration-200">Düzenle</button>
+                        <button data-id="${activity.id}" class="delete-button bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600 transition duration-200">Sil</button>
+                    </div>
+                `;
+                activityList.appendChild(listItem);
+            });
+        }
 
         attachActivityEventListeners(); // Yeni eklenen butonlara event listener ekle
     }, (error) => {
-        console.error("Aktiviteleri yükleme hatası:", error);
+        console.error("Aktiviteleri yükleme hatası:", error); // Debug log
         showMessage("Aktiviteleri yüklerken bir hata oluştu.", true);
     });
 }
@@ -321,7 +335,6 @@ function attachActivityEventListeners() {
     document.querySelectorAll('.delete-button').forEach(button => {
         button.onclick = async (e) => {
             const id = e.target.dataset.id;
-            // `confirm()` yerine özel modal kullanıldı
             if (currentUserId) {
                 showConfirmationModal('Bu aktiviteyi silmek istediğinizden emin misiniz?', async (confirmed) => {
                     if (confirmed) {
@@ -329,10 +342,13 @@ function attachActivityEventListeners() {
                             await deleteDoc(doc(db, `artifacts/${appId}/users/${currentUserId}/activities`, id));
                             showMessage('Aktivite başarıyla silindi!', false);
                         } catch (error) {
+                            console.error("Activity delete error:", error); // Debug log
                             showMessage(`Aktivite silme hatası: ${error.message}`, true);
                         }
                     }
                 });
+            } else {
+                showMessage("Aktivite silmek için giriş yapmalısınız.", true);
             }
         };
     });
@@ -340,11 +356,15 @@ function attachActivityEventListeners() {
     document.querySelectorAll('.edit-button').forEach(button => {
         button.onclick = async (e) => {
             const id = e.target.dataset.id;
-            const currentActivityDoc = await doc(db, `artifacts/${appId}/users/${currentUserId}/activities`, id);
-            const currentActivity = await getDoc(currentActivityDoc);
+            if (!currentUserId) {
+                showMessage("Aktivite düzenlemek için giriş yapmalısınız.", true);
+                return;
+            }
+            const currentActivityDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/activities`, id);
+            const currentActivitySnap = await getDoc(currentActivityDocRef);
 
-            if (currentActivity.exists()) {
-                const data = currentActivity.data();
+            if (currentActivitySnap.exists()) {
+                const data = currentActivitySnap.data();
                 // Basit prompt pencereleri kullanılıyor, daha iyi bir kullanıcı deneyimi için modal pencereler tercih edilmeli.
                 const newTitle = prompt('Yeni başlık girin:', data.title);
                 const newDate = prompt('Yeni tarih girin (YYYY-MM-DD):', data.date);
@@ -354,7 +374,7 @@ function attachActivityEventListeners() {
                 if (newTitle !== null && newDate !== null) {
                     try {
                         const updatedDateTime = new Date(`${newDate}T${newTime || '00:00'}`);
-                        await updateDoc(currentActivityDoc, {
+                        await updateDoc(currentActivityDocRef, {
                             title: newTitle,
                             date: updatedDateTime.toISOString().split('T')[0],
                             time: newTime || '',
@@ -363,9 +383,12 @@ function attachActivityEventListeners() {
                         });
                         showMessage('Aktivite başarıyla güncellendi!', false);
                     } catch (error) {
+                        console.error("Activity update error:", error); // Debug log
                         showMessage(`Aktivite güncelleme hatası: ${error.message}`, true);
                     }
                 }
+            } else {
+                showMessage("Düzenlenecek aktivite bulunamadı.", true);
             }
         };
     });
@@ -419,29 +442,26 @@ function calculateReminderTime(activityTimestamp, reminderOption) {
 
 // Uygulama başlatıldığında, auth durumunu kontrol eder ve buna göre UI'ı gösterir
 document.addEventListener('DOMContentLoaded', async () => {
-    // __initial_auth_token değişkeni tanımlıysa, özel token ile giriş yapmayı dene (Canvas ortamı için)
+    console.log("DOMContentLoaded: Initializing Firebase Auth state."); // Debug log
+    // `onAuthStateChanged` zaten otomatik olarak tetiklenecektir.
+    // Burada yalnızca Canvas ortamına özgü `__initial_auth_token` kullanımı ele alınır.
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        try {
-            // Henüz giriş yapmamışsa veya anonimse token ile giriş yap
-            if (!auth.currentUser || auth.currentUser.isAnonymous) {
+        // Eğer Canvas ortamındaysak ve henüz bir kullanıcı yoksa veya anonimse
+        // __initial_auth_token ile giriş yapmayı deneriz.
+        if (!auth.currentUser || auth.currentUser.isAnonymous) {
+            try {
                 await signInWithCustomToken(auth, __initial_auth_token);
-                console.log("Canvas tarafından sağlanan özel token ile giriş yapıldı.");
-            }
-        } catch (error) {
-            console.error("Özel token ile giriş hatası:", error);
-            // Hata durumunda (veya Canvas dışı ortamda) anonim olarak giriş yap
-            if (!auth.currentUser) { // Eğer zaten bir kullanıcı yoksa anonim giriş yap
-                 await signInAnonymously(auth);
-                 console.log("Özel token hatası veya Canvas dışı ortam nedeniyle anonim olarak giriş yapıldı.");
+                console.log("DOMContentLoaded: Canvas token ile giriş denendi.");
+            } catch (error) {
+                console.error("DOMContentLoaded: Canvas token ile giriş hatası:", error);
+                // Hata durumunda, kullanıcının giriş yapması için formu gösteriyoruz.
+                // Anonim giriş fallback'i kaldırıldı.
             }
         }
-    } else {
-        // __initial_auth_token tanımlı değilse, anonim olarak giriş yap
-        if (!auth.currentUser) { // Eğer zaten bir kullanıcı yoksa anonim giriş yap
-            await signInAnonymously(auth);
-            console.log("Anonim olarak giriş yapıldı.");
-        }
-    }
+    } 
+    // Diğer durumlarda (Canvas dışı veya token yoksa),
+    // onAuthStateChanged Firebase'in kimlik doğrulama durumunu yönetecek.
+    // Kullanıcı giriş yapmamışsa, kimlik doğrulama formu kalacaktır.
 });
 
 // Reminder (Hatırlatıcı) fonksiyonelliği için önemli not:
