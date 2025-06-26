@@ -1,0 +1,87 @@
+body {
+    font-family: Arial, sans-serif; /* Yazı tipi seçimi */
+    background-color: #f4f4f4; /* Arka plan rengi */
+    display: flex; /* İçeriği ortalamak için */
+    justify-content: center; /* Yatayda ortala */
+    align-items: center; /* Dikeyde ortala */
+    min-height: 100vh; /* Ekranın tamamını kapla */
+    margin: 0; /* Sayfanın kenarlarındaki boşlukları kaldır */
+}
+
+.container {
+    background-color: #fff; /* Konteynerin arka planı beyaz olsun */
+    padding: 30px; /* İç boşluk */
+    border-radius: 8px; /* Köşeleri hafif yuvarla */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Hafif gölge ekle */
+    width: 100%; /* Konteynerin genişliği */
+    max-width: 500px; /* En fazla 500px olsun */
+    text-align: center; /* İçindeki metni ortala */
+}
+
+h1 {
+    color: #333; /* Başlık rengi */
+    margin-bottom: 25px; /* Başlığın altındaki boşluk */
+}
+
+.input-area {
+    display: flex; /* Input ve butonu yan yana getir */
+    gap: 10px; /* Aralarında boşluk bırak */
+    margin-bottom: 20px; /* Altındaki boşluk */
+}
+
+#agendaInput {
+    flex-grow: 1; /* Mevcut alanı doldur */
+    padding: 10px; /* İç boşluk */
+    border: 1px solid #ddd; /* Çerçeve */
+    border-radius: 4px; /* Köşeleri yuvarla */
+    font-size: 16px; /* Yazı boyutu */
+}
+
+#addButton {
+    background-color: #4CAF50; /* Yeşil buton rengi */
+    color: white; /* Yazı rengi beyaz olsun */
+    padding: 10px 20px; /* İç boşluk */
+    border: none; /* Çerçeve yok */
+    border-radius: 4px; /* Köşeleri yuvarla */
+    cursor: pointer; /* Fare üzerine gelince el işareti çıksın */
+    font-size: 16px; /* Yazı boyutu */
+    transition: background-color 0.3s ease; /* Renk değişimi yumuşak olsun */
+}
+
+#addButton:hover {
+    background-color: #45a049; /* Fare üzerine gelince rengi hafif koyulaşsın */
+}
+
+#agendaList {
+    list-style: none; /* Liste işaretlerini kaldır */
+    padding: 0; /* İç boşlukları kaldır */
+    text-align: left; /* Liste öğelerini sola hizala */
+}
+
+#agendaList li {
+    background-color: #e9e9e9; /* Liste öğesi arka planı */
+    padding: 12px 15px; /* İç boşluk */
+    margin-bottom: 10px; /* Altındaki boşluk */
+    border-radius: 4px; /* Köşeleri yuvarla */
+    display: flex; /* İçeriği düzenlemek için */
+    justify-content: space-between; /* Metin ve butonu iki yana yasla */
+    align-items: center; /* Dikeyde ortala */
+    word-wrap: break-word; /* Uzun kelimeleri alt satıra indir */
+}
+
+.delete-button {
+    background-color: #f44336; /* Kırmızı silme butonu */
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s ease;
+    margin-left: 10px; /* Metinden biraz boşluk bırak */
+    flex-shrink: 0; /* Butonun küçülmesini engelle */
+}
+
+.delete-button:hover {
+    background-color: #da190b; /* Fare üzerine gelince rengi koyulaşsın */
+}
