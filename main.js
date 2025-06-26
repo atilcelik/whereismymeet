@@ -61,8 +61,16 @@ const reminderTimeSelect = document.getElementById('reminder-time');
 const addActivityButton = document.getElementById('add-activity-button');
 const activityList = document.getElementById('activity-list');
 
+// Yeni eklenen modal elementleri
+const confirmationModal = document.getElementById('confirmation-modal');
+const modalTitle = document.getElementById('modal-title');
+const modalMessage = document.getElementById('modal-message');
+const modalCancelButton = document.getElementById('modal-cancel-button');
+const modalConfirmButton = document.getElementById('modal-confirm-button');
+
 let isRegistering = false; // Kayıt olma veya giriş yapma durumunu tutar
 let currentUserId = null; // Mevcut kullanıcı kimliğini tutar
+let onConfirmCallback = null; // Modal onay callback'i
 
 // Mesaj kutusunu gösteren yardımcı fonksiyon
 function showMessage(message, isError = true) {
@@ -79,6 +87,32 @@ function showMessage(message, isError = true) {
         messageBox.classList.add('hidden');
     }, 5000); // 5 saniye sonra gizle
 }
+
+// Özel onay modalını gösteren fonksiyon
+function showConfirmationModal(message, callback) {
+    modalMessage.textContent = message;
+    onConfirmCallback = callback; // Callback'i sakla
+    confirmationModal.classList.remove('hidden'); // Modalı göster
+}
+
+// Modal iptal butonu olay dinleyicisi
+modalCancelButton.addEventListener('click', () => {
+    confirmationModal.classList.add('hidden'); // Modalı gizle
+    if (onConfirmCallback) {
+        onConfirmCallback(false); // Callback'i false ile çağır
+    }
+    onConfirmCallback = null; // Callback'i temizle
+});
+
+// Modal onay butonu olay dinleyicisi
+modalConfirmButton.addEventListener('click', () => {
+    confirmationModal.classList.add('hidden'); // Modalı gizle
+    if (onConfirmCallback) {
+        onConfirmCallback(true); // Callback'i true ile çağır
+    }
+    onConfirmCallback = null; // Callback'i temizle
+});
+
 
 // Kimlik doğrulama formunu değiştirme fonksiyonu (kayıt ol/giriş yap)
 toggleAuthButton.addEventListener('click', (e) => {
@@ -98,13 +132,23 @@ toggleAuthButton.addEventListener('click', (e) => {
 // Kimlik doğrulama formunu gönderme işleyicisi
 authForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    console.log("Auth form submitted."); // Debug log
     const email = emailInput.value;
     const password = passwordInput.value;
 
+    // Şifre boş veya çok kısaysa hata mesajı göster
+    if (!password || password.length < 6) {
+        showMessage('Şifre en az 6 karakter olmalıdır.', true);
+        return; // İşlemi durdur
+    }
+
     if (isRegistering) {
+        console.log("Attempting to register new user..."); // Debug log
+        console.log(`Email: ${email}, Password length: ${password.length}`); // Debug log (don't log actual password)
         // Kayıt ol
         try {
             await createUserWithEmailAndPassword(auth, email, password);
+            console.log("User successfully registered."); // Debug log
             showMessage('Başarıyla kaydoldunuz! Şimdi giriş yapabilirsiniz.', false);
             // Kaydolduktan sonra otomatik olarak giriş yapma ekranına dön
             isRegistering = false;
@@ -112,15 +156,35 @@ authForm.addEventListener('submit', async (e) => {
             authButton.textContent = 'Giriş Yap';
             toggleAuthButton.textContent = 'Kaydolun';
         } catch (error) {
-            showMessage(`Kaydolma hatası: ${error.message}`);
+            console.error("Registration error:", error); // Debug log
+            // Firebase hata kodlarını daha anlaşılır mesajlara çevirebiliriz
+            let errorMessage = error.message;
+            if (error.code === 'auth/email-already-in-use') {
+                errorMessage = 'Bu e-posta adresi zaten kullanılıyor.';
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = 'Geçersiz e-posta adresi.';
+            } else if (error.code === 'auth/weak-password') {
+                errorMessage = 'Şifre çok zayıf. Lütfen daha güçlü bir şifre girin.';
+            }
+            showMessage(`Kaydolma hatası: ${errorMessage}`);
         }
     } else {
+        console.log("Attempting to sign in user..."); // Debug log
+        console.log(`Email: ${email}, Password length: ${password.length}`); // Debug log
         // Giriş yap
         try {
             await signInWithEmailAndPassword(auth, email, password);
+            console.log("User successfully signed in."); // Debug log
             showMessage('Başarıyla giriş yaptınız!', false);
         } catch (error) {
-            showMessage(`Giriş hatası: ${error.message}`);
+            console.error("Sign-in error:", error); // Debug log
+            let errorMessage = error.message;
+            if (error.code === 'auth/invalid-credential') {
+                errorMessage = 'Geçersiz e-posta veya şifre.';
+            } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                errorMessage = 'Geçersiz e-posta veya şifre.';
+            }
+            showMessage(`Giriş hatası: ${errorMessage}`);
         }
     }
 });
@@ -257,15 +321,18 @@ function attachActivityEventListeners() {
     document.querySelectorAll('.delete-button').forEach(button => {
         button.onclick = async (e) => {
             const id = e.target.dataset.id;
-            // Bir onay modalı kullanmak alert yerine daha iyidir.
-            // Şimdilik alert kullanıyoruz, ancak bunu özel bir modal ile değiştirmenizi öneririm.
-            if (currentUserId && confirm('Bu aktiviteyi silmek istediğinizden emin misiniz?')) { 
-                try {
-                    await deleteDoc(doc(db, `artifacts/${appId}/users/${currentUserId}/activities`, id));
-                    showMessage('Aktivite başarıyla silindi!', false);
-                } catch (error) {
-                    showMessage(`Aktivite silme hatası: ${error.message}`, true);
-                }
+            // `confirm()` yerine özel modal kullanıldı
+            if (currentUserId) {
+                showConfirmationModal('Bu aktiviteyi silmek istediğinizden emin misiniz?', async (confirmed) => {
+                    if (confirmed) {
+                        try {
+                            await deleteDoc(doc(db, `artifacts/${appId}/users/${currentUserId}/activities`, id));
+                            showMessage('Aktivite başarıyla silindi!', false);
+                        } catch (error) {
+                            showMessage(`Aktivite silme hatası: ${error.message}`, true);
+                        }
+                    }
+                });
             }
         };
     });
