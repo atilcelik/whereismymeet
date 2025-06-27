@@ -40,6 +40,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Uygulama kimliğini al veya varsayılan olarak projectId'yi kullan (GitHub Pages için uygun)
+// Bu değer, Firestore güvenlik kurallarındaki {appId} ile eşleşmelidir.
 const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
 
 // DOM elementlerini seçin
@@ -246,9 +247,12 @@ addActivityButton.addEventListener('click', async () => {
     const reminder = reminderTimeSelect.value;
 
     if (title && date && currentUserId) {
+        // Oluşturulacak koleksiyon yolu
+        const collectionPath = `artifacts/${appId}/users/${currentUserId}/activities`;
+        console.log("Attempting to add activity to collection:", collectionPath); // Yeni debug log
         try {
             const activityDateTime = new Date(`${date}T${time || '00:00'}`);
-            await addDoc(collection(db, `artifacts/${appId}/users/${currentUserId}/activities`), {
+            await addDoc(collection(db, collectionPath), {
                 title,
                 date: activityDateTime.toISOString().split('T')[0], // Sadece tarih
                 time: time || '', // Saat (isteğe bağlı)
@@ -277,14 +281,14 @@ function loadActivities(userId) {
         activityList.innerHTML = ''; // Kullanıcı yoksa listeyi temizle
         return;
     }
-    console.log("Loading activities for user ID:", userId); // Debug log
+    // Yüklenecek koleksiyon yolu
+    const collectionPath = `artifacts/${appId}/users/${userId}/activities`;
+    console.log("Attempting to load activities from collection:", collectionPath); // Yeni debug log
+
     // Kullanıcının koleksiyonuna sorgu oluştur
-    const q = query(collection(db, `artifacts/${appId}/users/${userId}/activities`));
+    const q = query(collection(db, collectionPath));
 
     // Anlık güncellemeleri dinle
-    // onSnapshot, dinlemeyi başlatan bir Unsubscribe fonksiyonu döndürür.
-    // Uygulamadan çıkarken veya kullanıcı değiştiğinde eski dinleyicileri temizlemek iyi bir pratiktir.
-    // Şimdilik basit tutuyoruz, ancak karmaşık uygulamalarda bu önemli olabilir.
     onSnapshot(q, (snapshot) => {
         activityList.innerHTML = ''; // Listeyi temizle
         const activities = [];
@@ -338,8 +342,11 @@ function attachActivityEventListeners() {
             if (currentUserId) {
                 showConfirmationModal('Bu aktiviteyi silmek istediğinizden emin misiniz?', async (confirmed) => {
                     if (confirmed) {
+                        // Silinecek belge yolu
+                        const documentPath = `artifacts/${appId}/users/${currentUserId}/activities/${id}`;
+                        console.log("Attempting to delete document:", documentPath); // Yeni debug log
                         try {
-                            await deleteDoc(doc(db, `artifacts/${appId}/users/${currentUserId}/activities`, id));
+                            await deleteDoc(doc(db, documentPath));
                             showMessage('Aktivite başarıyla silindi!', false);
                         } catch (error) {
                             console.error("Activity delete error:", error); // Debug log
@@ -360,12 +367,14 @@ function attachActivityEventListeners() {
                 showMessage("Aktivite düzenlemek için giriş yapmalısınız.", true);
                 return;
             }
-            const currentActivityDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/activities`, id);
+            // Düzenlenecek belge yolu
+            const documentPath = `artifacts/${appId}/users/${currentUserId}/activities/${id}`;
+            console.log("Attempting to get/update document:", documentPath); // Yeni debug log
+            const currentActivityDocRef = doc(db, documentPath);
             const currentActivitySnap = await getDoc(currentActivityDocRef);
 
             if (currentActivitySnap.exists()) {
                 const data = currentActivitySnap.data();
-                // Basit prompt pencereleri kullanılıyor, daha iyi bir kullanıcı deneyimi için modal pencereler tercih edilmeli.
                 const newTitle = prompt('Yeni başlık girin:', data.title);
                 const newDate = prompt('Yeni tarih girin (YYYY-MM-DD):', data.date);
                 const newTime = prompt('Yeni saat girin (HH:MM):', data.time);
@@ -395,35 +404,17 @@ function attachActivityEventListeners() {
 }
 
 // Hatırlatıcı gönderme fonksiyonu (Gerçek bir hatırlatıcı sistemi için sunucu tarafı bir çözüm gerekir)
-// Bu sadece bir placeholder'dır. Mail göndermek için bir sunucuya veya bulut fonksiyonlarına ihtiyacınız var.
 async function sendReminderEmail(activity) {
     const reminderDateTime = calculateReminderTime(activity.dateTime, activity.reminder);
     const currentDateTime = Date.now();
+    console.log(`DEBUG: sendReminderEmail çağrıldı. Aktivite: ${activity.title}, Hatırlatıcı zamanı (timestamp): ${reminderDateTime}`);
 
-    // Hatırlatma zamanı geçmişse veya henüz çok erken ise gönderme
     if (reminderDateTime <= currentDateTime) {
-        // Bu kısımda bir e-posta gönderme API'si veya Firebase Cloud Functions gibi bir servis kullanılmalıdır.
-        // Örneğin:
-        /*
-        try {
-            // Bir sunucu API'nize veya Firebase Cloud Function'ınıza fetch isteği gönderin
-            await fetch('/sendReminder', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    to: auth.currentUser.email,
-                    subject: 'Ajanda Hatırlatıcısı: ' + activity.title,
-                    text: `${activity.title} aktiviteniz ${activity.date} ${activity.time} tarihinde başlayacaktır.`,
-                }),
-            });
-            console.log(`Hatırlatıcı gönderildi: ${activity.title}`);
-        } catch (error) {
-            console.error('Hatırlatıcı gönderme hatası:', error);
-        }
-        */
-        console.log(`DEBUG: Hatırlatıcı için mail gönderilecekti: ${activity.title} - Zaman: ${new Date(reminderDateTime).toLocaleString()}`);
+        console.log(`DEBUG: Hatırlatıcı zamanı geldi veya geçti. Mail gönderme simülasyonu: ${activity.title}`);
+        // Gerçek e-posta gönderimi için Firebase Cloud Functions veya benzeri bir backend servisi gereklidir.
+        // Bu kısım sadece bir placeholder'dır.
+    } else {
+        console.log(`DEBUG: Hatırlatıcı zamanı henüz gelmedi. Aktivite: ${activity.title}, Gönderilecek Zaman: ${new Date(reminderDateTime).toLocaleString()}`);
     }
 }
 
