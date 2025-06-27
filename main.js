@@ -1,24 +1,24 @@
 // Firebase SDK modüllerini içe aktarın
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { 
-    getAuth, 
-    signInAnonymously, 
-    signInWithCustomToken, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    signOut, 
-    onAuthStateChanged 
+import {
+    getAuth,
+    signInAnonymously,
+    signInWithCustomToken,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    query, 
-    where, 
-    onSnapshot, 
-    doc, 
-    deleteDoc, 
-    updateDoc, 
+import {
+    getFirestore,
+    collection,
+    addDoc,
+    query,
+    where,
+    onSnapshot,
+    doc,
+    deleteDoc,
+    updateDoc,
     serverTimestamp,
     getDoc // Belgeyi tek seferlik almak için eklendi
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -114,7 +114,6 @@ modalConfirmButton.addEventListener('click', () => {
     onConfirmCallback = null; // Callback'i temizle
 });
 
-
 // Kimlik doğrulama formunu değiştirme fonksiyonu (kayıt ol/giriş yap)
 toggleAuthButton.addEventListener('click', (e) => {
     e.preventDefault();
@@ -196,28 +195,24 @@ logoutButton.addEventListener('click', async () => {
     }
 });
 
-// Kimlik doğrulama durumu değiştiğinde çalışır - Bu, Firebase Auth'un ana dinleyicisidir
+// Kimlik doğrulama durumu değiştiğinde çalışır
 onAuthStateChanged(auth, async (user) => {
     console.log("onAuthStateChanged triggered. User:", user ? user.uid : "null"); // Debug log
     if (user) {
-        // Kullanıcı giriş yapmış (e-posta/şifre veya anonim)
+        // Kullanıcı giriş yapmış
         currentUserId = user.uid;
         console.log("Current user ID:", currentUserId); // Debug log
 
-        // Eğer Canvas ortamındaysak ve kullanıcı anonimse, custom token ile giriş yapmayı deneriz.
-        // Bu, Canvas'ın varsayılan otomatik girişini yönetir ve mevcut e-posta/şifre oturumunu bozmaz.
+        // Canvas ortamındaysa ve kullanıcı anonimse, custom token ile giriş yapılabilir
         if (typeof __initial_auth_token !== 'undefined' && user.isAnonymous) {
             try {
-                // Sadece kullanıcı gerçekten anonim ise özel token ile giriş yapmayı deneyin
                 await signInWithCustomToken(auth, __initial_auth_token);
                 console.log("Canvas tarafından sağlanan özel token ile giriş yapıldı.");
-                // Token ile başarılı girişten sonra onAuthStateChanged tekrar tetiklenebilir
             } catch (error) {
                 console.error("Özel token ile giriş hatası:", error);
-                // Hata durumunda kullanıcıyı anonim bırak, yine de verileri kaydedebilir (geçici)
             }
         }
-        
+
         // Uygulama arayüzünü göster
         authContainer.classList.add('hidden');
         appContainer.classList.remove('hidden');
@@ -226,16 +221,13 @@ onAuthStateChanged(auth, async (user) => {
         // Kullanıcı çıkış yapmış veya henüz giriş yapmamış
         currentUserId = null;
         console.log("User is logged out. Showing auth container."); // Debug log
-        
-        // Kimlik doğrulama arayüzünü göster
+
+        // Giriş formunu göster
         appContainer.classList.add('hidden');
         authContainer.classList.remove('hidden');
-        activityList.innerHTML = ''; // Aktiviteleri temizle
+        activityList.innerHTML = '';
 
-        // NOT: Kalıcı veri tutma istendiği için burada otomatik anonim giriş yapmıyoruz.
-        // Kullanıcı, e-posta/şifre formu üzerinden açıkça giriş yapmalı veya kaydolmalıdır.
-        // Eğer Canvas'ın kendi otomatik token'ı yoksa ve kullanıcı giriş yapmamışsa,
-        // kullanıcıdan giriş yapması beklenecektir.
+        // Otomatik anonim giriş yapılmıyor
     }
 });
 
@@ -247,18 +239,17 @@ addActivityButton.addEventListener('click', async () => {
     const reminder = reminderTimeSelect.value;
 
     if (title && date && currentUserId) {
-        // Oluşturulacak koleksiyon yolu
         const collectionPath = `artifacts/${appId}/users/${currentUserId}/activities`;
         console.log("Attempting to add activity to collection:", collectionPath); // Yeni debug log
         try {
             const activityDateTime = new Date(`${date}T${time || '00:00'}`);
             await addDoc(collection(db, collectionPath), {
                 title,
-                date: activityDateTime.toISOString().split('T')[0], // Sadece tarih
-                time: time || '', // Saat (isteğe bağlı)
-                dateTime: activityDateTime.getTime(), // Unix timestamp olarak sakla
+                date: activityDateTime.toISOString().split('T')[0],
+                time: time || '',
+                dateTime: activityDateTime.getTime(),
                 reminder,
-                createdAt: serverTimestamp() // Sunucu zaman damgası
+                createdAt: serverTimestamp()
             });
             activityTitleInput.value = '';
             activityDateInput.value = '';
@@ -278,19 +269,16 @@ addActivityButton.addEventListener('click', async () => {
 function loadActivities(userId) {
     if (!userId) {
         console.log("No user ID available to load activities.");
-        activityList.innerHTML = ''; // Kullanıcı yoksa listeyi temizle
+        activityList.innerHTML = '';
         return;
     }
-    // Yüklenecek koleksiyon yolu
     const collectionPath = `artifacts/${appId}/users/${userId}/activities`;
     console.log("Attempting to load activities from collection:", collectionPath); // Yeni debug log
 
-    // Kullanıcının koleksiyonuna sorgu oluştur
     const q = query(collection(db, collectionPath));
 
-    // Anlık güncellemeleri dinle
     onSnapshot(q, (snapshot) => {
-        activityList.innerHTML = ''; // Listeyi temizle
+        activityList.innerHTML = '';
         const activities = [];
         snapshot.forEach(doc => {
             activities.push({ id: doc.id, ...doc.data() });
@@ -309,7 +297,7 @@ function loadActivities(userId) {
             activities.forEach(activity => {
                 const listItem = document.createElement('li');
                 listItem.className = 'bg-gray-50 p-4 rounded-lg shadow-sm flex items-center justify-between transition duration-200 hover:bg-gray-100';
-                
+
                 const activityDateTime = activity.time ? `${activity.date} ${activity.time}` : activity.date;
                 const reminderText = activity.reminder ? `(Hatırlatıcı: ${activity.reminder})` : '';
 
@@ -342,7 +330,6 @@ function attachActivityEventListeners() {
             if (currentUserId) {
                 showConfirmationModal('Bu aktiviteyi silmek istediğinizden emin misiniz?', async (confirmed) => {
                     if (confirmed) {
-                        // Silinecek belge yolu
                         const documentPath = `artifacts/${appId}/users/${currentUserId}/activities/${id}`;
                         console.log("Attempting to delete document:", documentPath); // Yeni debug log
                         try {
@@ -367,7 +354,6 @@ function attachActivityEventListeners() {
                 showMessage("Aktivite düzenlemek için giriş yapmalısınız.", true);
                 return;
             }
-            // Düzenlenecek belge yolu
             const documentPath = `artifacts/${appId}/users/${currentUserId}/activities/${id}`;
             console.log("Attempting to get/update document:", documentPath); // Yeni debug log
             const currentActivityDocRef = doc(db, documentPath);
@@ -403,7 +389,7 @@ function attachActivityEventListeners() {
     });
 }
 
-// Hatırlatıcı gönderme fonksiyonu (Gerçek bir hatırlatıcı sistemi için sunucu tarafı bir çözüm gerekir)
+// Hatırlatıcı gönderme fonksiyonu (placeholder)
 async function sendReminderEmail(activity) {
     const reminderDateTime = calculateReminderTime(activity.dateTime, activity.reminder);
     const currentDateTime = Date.now();
@@ -412,7 +398,6 @@ async function sendReminderEmail(activity) {
     if (reminderDateTime <= currentDateTime) {
         console.log(`DEBUG: Hatırlatıcı zamanı geldi veya geçti. Mail gönderme simülasyonu: ${activity.title}`);
         // Gerçek e-posta gönderimi için Firebase Cloud Functions veya benzeri bir backend servisi gereklidir.
-        // Bu kısım sadece bir placeholder'dır.
     } else {
         console.log(`DEBUG: Hatırlatıcı zamanı henüz gelmedi. Aktivite: ${activity.title}, Gönderilecek Zaman: ${new Date(reminderDateTime).toLocaleString()}`);
     }
@@ -431,37 +416,23 @@ function calculateReminderTime(activityTimestamp, reminderOption) {
     return activityTimestamp - reminderOffset;
 }
 
-// Uygulama başlatıldığında, auth durumunu kontrol eder ve buna göre UI'ı gösterir
+// Uygulama başlatıldığında, auth durumunu kontrol eder
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("DOMContentLoaded: Initializing Firebase Auth state."); // Debug log
-    // `onAuthStateChanged` zaten otomatik olarak tetiklenecektir.
-    // Burada yalnızca Canvas ortamına özgü `__initial_auth_token` kullanımı ele alınır.
+    // onAuthStateChanged zaten otomatik olarak tetiklenecek.
     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        // Eğer Canvas ortamındaysak ve henüz bir kullanıcı yoksa veya anonimse
-        // __initial_auth_token ile giriş yapmayı deneriz.
         if (!auth.currentUser || auth.currentUser.isAnonymous) {
             try {
                 await signInWithCustomToken(auth, __initial_auth_token);
                 console.log("DOMContentLoaded: Canvas token ile giriş denendi.");
             } catch (error) {
                 console.error("DOMContentLoaded: Canvas token ile giriş hatası:", error);
-                // Hata durumunda, kullanıcının giriş yapması için formu gösteriyoruz.
-                // Anonim giriş fallback'i kaldırıldı.
             }
         }
-    } 
-    // Diğer durumlarda (Canvas dışı veya token yoksa),
-    // onAuthStateChanged Firebase'in kimlik doğrulama durumunu yönetecek.
-    // Kullanıcı giriş yapmamışsa, kimlik doğrulama formu kalacaktır.
+    }
+    // Token yoksa veya Canvas dışındaysak, kullanıcı giriş yapmamışsa form gösterilir.
 });
 
-// Reminder (Hatırlatıcı) fonksiyonelliği için önemli not:
-// E-posta gönderme işlemi doğrudan tarayıcı tarafından güvenli bir şekilde yapılamaz.
-// Bunun için bir sunucu tarafı hizmetine (örneğin Firebase Cloud Functions, SendGrid, Mailgun vb.) ihtiyacınız olacaktır.
-// Kullanıcının e-posta adresine hatırlatıcı göndermek için, backend'de bir fonksiyon oluşturmanız ve
-// bu fonksiyona aktivite verilerini (başlık, tarih, saat, hatırlatma zamanı, kullanıcı e-postası)
-// göndermeniz gerekmektedir. Firebase Cloud Functions, Firestore'daki veri değişikliklerini
-// dinleyerek (örneğin yeni bir aktivite eklendiğinde veya hatırlatma zamanı geldiğinde)
-// e-posta göndermek için ideal bir çözümdür.
-// Yukarıdaki `sendReminderEmail` fonksiyonu bir placeholder'dır ve çalışmaz.
-// Gerçek bir uygulama için bu kısmı kendi backend çözümünüzle entegre etmeniz gerekmektedir.
+// Reminder fonksiyonelliği için önemli notlar
+// Gerçek bir uygulamada e-posta göndermek için backend hizmeti gerekmektedir.
+// Bu dosyada yer alan sendReminderEmail işlevi yalnızca örnek amaçlıdır.
